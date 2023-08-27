@@ -97,8 +97,8 @@ resource "aws_security_group" "myvpcallow_all" {
 
   ingress {
     description      = "TLS from VPC"
-    from_port        = 80
-    to_port          = 80
+    from_port        = 0
+    to_port          = 5000
     protocol         = "tcp"
     cidr_blocks      = ["0.0.0.0/0"]
   }
@@ -116,64 +116,20 @@ resource "aws_security_group" "myvpcallow_all" {
   }
 }
 
-resource "aws_instance" "instance1"{
-    ami = "ami-0f5ee92e2d63afc18"
-    instance_type = "t2.micro"
-    key_name = "080823"
-    subnet_id = aws_subnet.pubsub.id
-    vpc_security_group_ids = [aws_security_group.myvpcallow_all.id]
-    associate_public_ip_address = "true"
-    user_data = <<-EOF
-              #!/bin/bash
-              sudo apt update -y
-              sudo apt install docker.io -y
-              sudo service docker start
-              sudo usermod -a -G docker ubuntu
-              docker pull pakas142/devopsathon:latest
-              docker run -d -p 5000:5000 pakas142/devopsathon:latest
-              EOF
-}
-
-resource "aws_instance" "instance2"{
-    ami = "ami-0f5ee92e2d63afc18"
-    instance_type = "t2.micro"
-    key_name = "080823"
-    subnet_id = aws_subnet.prisub.id
-    vpc_security_group_ids = [aws_security_group.myvpcallow_all.id]
-}
-
-resource "aws_elb" "elb" {
-  name               = "dev-terraform-elb"
-  availability_zones = ["ap-south-1a", "ap-south-1b", "ap-south-1c"]
-
-  listener {
-    instance_port     = 80
-    instance_protocol = "http"
-    lb_port           = 80
-    lb_protocol       = "http"
-  }
-
-  health_check {
-    healthy_threshold   = 2
-    unhealthy_threshold = 2
-    timeout             = 3
-    target              = "HTTP:80/"
-    interval            = 30
-  }
-
-  instances                   = ["${aws_instance.instance1.id}", "${aws_instance.instance2.id}"]
-  cross_zone_load_balancing   = true
-  idle_timeout                = 40
-
-  tags = {
-    Name = "devops-terraform-elb"
-  }
-}
 resource "aws_launch_configuration" "asg_conf" {
   name_prefix = "asg-config"
   image_id      = "ami-0f5ee92e2d63afc18"
   instance_type = "t2.micro"
   key_name = "080823"
+  user_data = <<-EOF
+              #!/bin/bash
+              sh sudo apt update -y
+              sh sudo apt install docker.io -y
+              sh sudo service docker start
+              sh sudo usermod -a -G docker ubuntu
+              sh docker pull pakas142/devopsathon:latest
+              sh docker run -d -p 5000:5000 pakas142/devopsathon:latest
+              EOF
 }
 
 resource "aws_autoscaling_group" "asg" {
@@ -192,15 +148,6 @@ tag {
     propagate_at_launch = true
     }
 }
-resource "aws_autoscaling_policy" "asg_policy" {
-  name                   = "devopsathon-terraform-asg"
-  scaling_adjustment     = 1
-  adjustment_type        = "ChangeInCapacity"
-  cooldown               = 300
-  autoscaling_group_name = aws_autoscaling_group.asg.name
-  policy_type            = "SimpleScaling"
-}
-
 resource "aws_cloudwatch_metric_alarm" "cw_alarm" {
   alarm_name                = "terraform-cw-alarm"
   alarm_description         = "This metric monitors ec2 cpu utilization"
@@ -215,19 +162,4 @@ resource "aws_cloudwatch_metric_alarm" "cw_alarm" {
     "AutoScalingGroupName" = "$(aws_autoscaling_group.asg.name)"
   }
 }
-resource "aws_sns_topic" "cpu_sns" {
-  name = "sns-updates-topic"
-  display_name = "autoscaling sns topic"
-}
 
-resource "aws_autoscaling_notification" "asg_notifications" {
-  group_names = [aws_autoscaling_group.asg.name]
-  topic_arn = aws_sns_topic.cpu_sns.arn
-
-  notifications = [
-    "autoscaling:EC2_INSTANCE_LAUNCH",
-    "autoscaling:EC2_INSTANCE_TERMINATE",
-    "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
-    "autoscaling:EC2_INSTANCE_TERMINATE_ERROR",
-  ]
-}
