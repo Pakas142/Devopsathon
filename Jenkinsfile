@@ -30,7 +30,7 @@ pipeline {
             steps {
                 sh 'terraform init'
                 sh 'terraform plan'
-                sh '/usr/local/bin/terraform apply --auto-approve'
+                sh '/usr/bin/terraform apply --auto-approve'
             }
         }
     }                                
