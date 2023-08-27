@@ -1,6 +1,6 @@
 FROM node:16-alpine as build
 WORKDIR /usr/app
-COPY /shoestop/. /usr/app
+COPY . /usr/app
 RUN npm install
 COPY . .
 RUN npm run build
